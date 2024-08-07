@@ -1,5 +1,5 @@
-import createPlugin from './../plugin'
-import { run, html, css } from './util/run'
+import createPlugin from '../src/public/create-plugin'
+import { run, html, css, defaults } from './util/run'
 
 test('plugins can create utilities with object syntax', () => {
   let config = {
@@ -203,13 +203,13 @@ test('plugins can create components with object syntax', () => {
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .btn-blue {
-        background-color: blue;
-        color: white;
-        padding: 0.5rem 1rem;
+        color: #fff;
+        background-color: #00f;
         border-radius: 0.25rem;
+        padding: 0.5rem 1rem;
       }
       .btn-blue:hover {
-        background-color: darkblue;
+        background-color: #00008b;
       }
     `)
   })
@@ -245,6 +245,7 @@ test('plugins can add base styles with object syntax', () => {
       button {
         font-family: inherit;
       }
+      ${defaults}
     `)
   })
 })
@@ -285,6 +286,7 @@ test('plugins can add base styles with raw PostCSS nodes', () => {
       button {
         font-family: inherit;
       }
+      ${defaults}
     `)
   })
 })
@@ -331,13 +333,13 @@ test('plugins can create components with raw PostCSS nodes', () => {
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .btn-blue {
-        background-color: blue;
-        color: white;
-        padding: 0.5rem 1rem;
+        color: #fff;
+        background-color: #00f;
         border-radius: 0.25rem;
+        padding: 0.5rem 1rem;
       }
       .btn-blue:hover {
-        background-color: darkblue;
+        background-color: #00008b;
       }
     `)
   })
@@ -384,13 +386,13 @@ test('plugins can create components with mixed object styles and raw PostCSS nod
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .btn-blue {
-        background-color: blue;
-        color: white;
-        padding: 0.5rem 1rem;
+        color: #fff;
+        background-color: #00f;
         border-radius: 0.25rem;
+        padding: 0.5rem 1rem;
       }
       .btn-blue:hover {
-        background-color: darkblue;
+        background-color: #00008b;
       }
     `)
   })
@@ -547,13 +549,13 @@ test('plugins can create nested rules', () => {
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .btn-blue {
-        background-color: blue;
-        color: white;
-        padding: 0.5rem 1rem;
+        color: #fff;
+        background-color: #00f;
         border-radius: 0.25rem;
+        padding: 0.5rem 1rem;
       }
       .btn-blue:hover {
-        background-color: darkblue;
+        background-color: #00008b;
       }
       @media (min-width: 500px) {
         .btn-blue:hover {
@@ -586,7 +588,7 @@ test('plugins can create rules with escaped selectors', () => {
 
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
-      .custom-top-1\\/4 {
+      .custom-top-1\/4 {
         top: 25%;
       }
     `)
@@ -781,8 +783,8 @@ test('plugins can add multiple sets of utilities and components', () => {
   return run('@tailwind components; @tailwind utilities;', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .card {
-        padding: 1rem;
         border-radius: 0.25rem;
+        padding: 1rem;
       }
       .btn {
         padding: 1rem 0.5rem;
@@ -866,8 +868,7 @@ test('when important is a selector it scopes all selectors in a rule, even thoug
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       #app .custom-rotate-90,
-      #app .custom-rotate-1\\/4 {
-        transform: rotate(90deg);
+      #app .custom-rotate-1\/4 {
         transform: rotate(90deg);
       }
     `)
@@ -916,7 +917,7 @@ test("component declarations respect the 'prefix' option by default", () => {
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .tw-btn-blue {
-        background-color: blue;
+        background-color: #00f;
       }
     `)
   })
@@ -952,7 +953,6 @@ test('all selectors in a rule are prefixed', () => {
       .tw-btn-blue,
       .tw-btn-red {
         padding: 10px;
-        padding: 10px;
       }
     `)
   })
@@ -979,7 +979,7 @@ test("component declarations can optionally ignore 'prefix' option", () => {
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .btn-blue {
-        background-color: blue;
+        background-color: #00f;
       }
     `)
   })
@@ -1003,7 +1003,7 @@ test("component declarations are not affected by the 'important' option", () => 
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .btn-blue {
-        background-color: blue;
+        background-color: #00f;
       }
     `)
   })
@@ -1030,7 +1030,7 @@ test("plugins can apply the user's chosen prefix to components manually", () => 
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .tw-btn-blue {
-        background-color: blue;
+        background-color: #00f;
       }
     `)
   })
@@ -1110,8 +1110,8 @@ test('prefix will prefix all classes in a selector', () => {
 
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
-      .tw-btn-blue .tw-w-1\\/4 > h1.tw-text-xl + a .tw-bar {
-        background-color: blue;
+      .tw-btn-blue .tw-w-1\/4 > h1.tw-text-xl + a .tw-bar {
+        background-color: #00f;
       }
     `)
   })
@@ -1217,15 +1217,14 @@ test('plugins can be created using the `createPlugin` function', () => {
     },
     plugins: [
       createPlugin(
-        function ({ addUtilities, theme, variants }) {
+        function ({ addUtilities, theme }) {
           addUtilities(
             Object.fromEntries(
               Object.entries(theme('testPlugin')).map(([k, v]) => [
                 `.test-${k}`,
                 { testProperty: v },
               ])
-            ),
-            variants('testPlugin')
+            )
           )
         },
         {
@@ -1252,11 +1251,11 @@ test('plugins can be created using the `createPlugin` function', () => {
       .test-lg {
         test-property: 3rem;
       }
-      .hover\\:test-sm:hover {
+      .hover\:test-sm:hover {
         test-property: 1rem;
       }
       @media (min-width: 400px) {
-        .sm\\:test-sm {
+        .sm\:test-sm {
           test-property: 1rem;
         }
       }
@@ -1293,7 +1292,9 @@ test('plugins with extra options can be created using the `createPlugin.withOpti
 
   let config = {
     content: [
-      { raw: html`<div class="banana-sm banana-md banana-lg hover:banana-sm sm:banana-sm"></div>` },
+      {
+        raw: html`<div class="banana-sm banana-md banana-lg hover:banana-sm sm:banana-sm"></div>`,
+      },
     ],
     corePlugins: [],
     theme: {
@@ -1315,11 +1316,11 @@ test('plugins with extra options can be created using the `createPlugin.withOpti
       .banana-lg {
         test-property: 3rem;
       }
-      .hover\\:banana-sm:hover {
+      .hover\:banana-sm:hover {
         test-property: 1rem;
       }
       @media (min-width: 400px) {
-        .sm\\:banana-sm {
+        .sm\:banana-sm {
           test-property: 1rem;
         }
       }
@@ -1355,9 +1356,8 @@ test('plugins should cache correctly', () => {
         .banana {
           position: absolute;
         }
-
         @media (min-width: 400px) {
-          .sm\\:banana {
+          .sm\:banana {
             position: absolute;
           }
         }
@@ -1367,9 +1367,8 @@ test('plugins should cache correctly', () => {
         .apple {
           position: absolute;
         }
-
         @media (min-width: 400px) {
-          .sm\\:apple {
+          .sm\:apple {
             position: absolute;
           }
         }
@@ -1404,16 +1403,15 @@ test('plugins created using `createPlugin.withOptions` do not need to be invoked
             lg: '3rem',
           },
         },
-        variants: {
-          testPlugin: ['responsive', 'hover'],
-        },
       }
     }
   )
 
   let config = {
     content: [
-      { raw: html`<div class="banana-sm banana-md banana-lg hover:banana-sm sm:banana-sm"></div>` },
+      {
+        raw: html`<div class="banana-sm banana-md banana-lg hover:banana-sm sm:banana-sm"></div>`,
+      },
     ],
     corePlugins: [],
     theme: {
@@ -1435,11 +1433,11 @@ test('plugins created using `createPlugin.withOptions` do not need to be invoked
       .banana-lg {
         test-property: 3rem;
       }
-      .hover\\:banana-sm:hover {
+      .hover\:banana-sm:hover {
         test-property: 1rem;
       }
       @media (min-width: 400px) {
-        .sm\\:banana-sm {
+        .sm\:banana-sm {
           test-property: 1rem;
         }
       }
@@ -1463,7 +1461,9 @@ test('the configFunction parameter is optional when using the `createPlugin.with
 
   let config = {
     content: [
-      { raw: html`<div class="banana-sm banana-md banana-lg hover:banana-sm sm:banana-sm"></div>` },
+      {
+        raw: html`<div class="banana-sm banana-md banana-lg hover:banana-sm sm:banana-sm"></div>`,
+      },
     ],
     corePlugins: [],
     theme: {
@@ -1490,11 +1490,11 @@ test('the configFunction parameter is optional when using the `createPlugin.with
       .banana-lg {
         test-property: 3px;
       }
-      .hover\\:banana-sm:hover {
+      .hover\:banana-sm:hover {
         test-property: 1px;
       }
       @media (min-width: 400px) {
-        .sm\\:banana-sm {
+        .sm\:banana-sm {
           test-property: 1px;
         }
       }
@@ -1504,25 +1504,18 @@ test('the configFunction parameter is optional when using the `createPlugin.with
 
 test('keyframes are not escaped', () => {
   let config = {
-    content: [{ raw: html`<div class="foo-[abc]"></div>` }],
+    content: [{ raw: html`<div class="foo-[abc] md:foo-[def]"></div>` }],
+    corePlugins: { preflight: false },
     plugins: [
       function ({ matchUtilities }) {
         matchUtilities({
-          foo: (value, { includeRules }) => {
-            includeRules(
-              [
-                {
-                  [`@keyframes ${value}`]: {
-                    '25.001%': {
-                      color: 'black',
-                    },
-                  },
-                },
-              ],
-              { respectImportant: false }
-            )
-
+          foo: (value) => {
             return {
+              [`@keyframes ${value}`]: {
+                '25.001%': {
+                  color: 'black',
+                },
+              },
               animation: `${value} 1s infinite`,
             }
           },
@@ -1535,11 +1528,21 @@ test('keyframes are not escaped', () => {
     expect(result.css).toMatchFormattedCss(css`
       @keyframes abc {
         25.001% {
-          color: black;
+          color: #000;
         }
       }
-      .foo-\\[abc\\] {
-        animation: abc 1s infinite;
+      .foo-\[abc\] {
+        animation: 1s infinite abc;
+      }
+      @media (min-width: 768px) {
+        @keyframes def {
+          25.001% {
+            color: #000;
+          }
+        }
+        .md\:foo-\[def\] {
+          animation: 1s infinite def;
+        }
       }
     `)
   })
@@ -1597,7 +1600,7 @@ test('outlines are retrieved without outline-offset using theme function', () =>
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .foo {
-        outline: 2px dotted black;
+        outline: 2px dotted #000;
       }
     `)
   })
@@ -1890,5 +1893,24 @@ test('animation values are joined when retrieved using the theme function', () =
         animation: width, height;
       }
     `)
+  })
+})
+
+test('custom properties are not converted to kebab-case when added to base layer', () => {
+  let config = {
+    content: [],
+    plugins: [
+      function ({ addBase }) {
+        addBase({
+          ':root': {
+            '--colors-primaryThing-500': '0, 0, 255',
+          },
+        })
+      },
+    ],
+  }
+
+  return run('@tailwind base', config).then((result) => {
+    expect(result.css).toContain(`--colors-primaryThing-500: 0, 0, 255;`)
   })
 })

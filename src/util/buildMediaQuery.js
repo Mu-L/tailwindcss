@@ -1,24 +1,22 @@
 export default function buildMediaQuery(screens) {
-  if (typeof screens === 'string') {
-    screens = { min: screens }
-  }
-
-  if (!Array.isArray(screens)) {
-    screens = [screens]
-  }
+  screens = Array.isArray(screens) ? screens : [screens]
 
   return screens
     .map((screen) => {
-      if (screen?.hasOwnProperty?.('raw')) {
-        return screen.raw
-      }
+      let values = screen.values.map((screen) => {
+        if (screen.raw !== undefined) {
+          return screen.raw
+        }
 
-      return Object.entries(screen)
-        .map(([feature, value]) => {
-          feature = { min: 'min-width', max: 'max-width' }[feature] ?? feature
-          return `(${feature}: ${value})`
-        })
-        .join(' and ')
+        return [
+          screen.min && `(min-width: ${screen.min})`,
+          screen.max && `(max-width: ${screen.max})`,
+        ]
+          .filter(Boolean)
+          .join(' and ')
+      })
+
+      return screen.not ? `not all and ${values}` : values
     })
     .join(', ')
 }

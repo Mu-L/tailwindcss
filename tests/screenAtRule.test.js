@@ -1,34 +1,29 @@
 import postcss from 'postcss'
 import plugin from '../src/lib/substituteScreenAtRules'
-import config from '../stubs/defaultConfig.stub.js'
+import config from '../stubs/config.full.js'
+import { css } from './util/run'
 
 function run(input, opts = config) {
   return postcss([plugin({ tailwindConfig: opts })]).process(input, { from: undefined })
 }
 
 test('it can generate media queries from configured screen sizes', () => {
-  const input = `
+  let input = css`
     @screen sm {
-      .banana { color: yellow; }
+      .banana {
+        color: yellow;
+      }
     }
     @screen md {
-      .banana { color: red; }
+      .banana {
+        color: red;
+      }
     }
     @screen lg {
-      .banana { color: green; }
+      .banana {
+        color: green;
+      }
     }
-  `
-
-  const output = `
-      @media (min-width: 500px) {
-        .banana { color: yellow; }
-      }
-      @media (min-width: 750px) {
-        .banana { color: red; }
-      }
-      @media (min-width: 1000px) {
-        .banana { color: green; }
-      }
   `
 
   return run(input, {
@@ -41,7 +36,23 @@ test('it can generate media queries from configured screen sizes', () => {
     },
     separator: ':',
   }).then((result) => {
-    expect(result.css).toMatchCss(output)
+    expect(result.css).toMatchFormattedCss(css`
+      @media (min-width: 500px) {
+        .banana {
+          color: #ff0;
+        }
+      }
+      @media (min-width: 750px) {
+        .banana {
+          color: red;
+        }
+      }
+      @media (min-width: 1000px) {
+        .banana {
+          color: green;
+        }
+      }
+    `)
     expect(result.warnings().length).toBe(0)
   })
 })

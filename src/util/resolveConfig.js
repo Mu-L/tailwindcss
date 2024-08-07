@@ -1,23 +1,18 @@
 import negateValue from './negateValue'
 import corePluginList from '../corePluginList'
 import configurePlugins from './configurePlugins'
-import defaultConfig from '../../stubs/defaultConfig.stub'
-import colors from '../../colors'
-import log from './log'
+import colors from '../public/colors'
 import { defaults } from './defaults'
 import { toPath } from './toPath'
-import dlv from 'dlv'
+import { normalizeConfig } from './normalizeConfig'
+import isPlainObject from './isPlainObject'
+import { cloneDeep } from './cloneDeep'
+import { parseColorFormat } from './pluginUtils'
+import { withAlphaValue } from './withAlphaVariable'
+import toColorValue from './toColorValue'
 
 function isFunction(input) {
   return typeof input === 'function'
-}
-
-function uniq(input) {
-  return Array.from(new Set(input))
-}
-
-function isObject(input) {
-  return typeof input === 'object' && input !== null
 }
 
 function mergeWith(target, ...sources) {
@@ -28,8 +23,8 @@ function mergeWith(target, ...sources) {
       let merged = customizer(target[k], source[k])
 
       if (merged === undefined) {
-        if (isObject(target[k]) && isObject(source[k])) {
-          target[k] = mergeWith(target[k], source[k], customizer)
+        if (isPlainObject(target[k]) && isPlainObject(source[k])) {
+          target[k] = mergeWith({}, target[k], source[k], customizer)
         } else {
           target[k] = source[k]
         }
@@ -45,15 +40,18 @@ function mergeWith(target, ...sources) {
 const configUtils = {
   colors,
   negative(scale) {
+    // TODO: Log that this function isn't really needed anymore?
     return Object.keys(scale)
       .filter((key) => scale[key] !== '0')
-      .reduce(
-        (negativeScale, key) => ({
-          ...negativeScale,
-          [`-${key}`]: negateValue(scale[key]),
-        }),
-        {}
-      )
+      .reduce((negativeScale, key) => {
+        let negativeValue = negateValue(scale[key])
+
+        if (negativeValue !== undefined) {
+          negativeScale[`-${key}`] = negativeValue
+        }
+
+        return negativeScale
+      }, {})
   },
   breakpoints(screens) {
     return Object.keys(screens)
@@ -100,12 +98,12 @@ function mergeThemes(themes) {
 
 function mergeExtensionCustomizer(merged, value) {
   // When we have an array of objects, we do want to merge it
-  if (Array.isArray(merged) && isObject(merged[0])) {
+  if (Array.isArray(merged) && isPlainObject(merged[0])) {
     return merged.concat(value)
   }
 
   // When the incoming value is an array, and the existing config is an object, prepend the existing object
-  if (Array.isArray(value) && isObject(value[0]) && isObject(merged)) {
+  if (Array.isArray(value) && isPlainObject(value[0]) && isPlainObject(merged)) {
     return [merged, ...value]
   }
 
@@ -134,32 +132,81 @@ function mergeExtensions({ extend, ...theme }) {
   })
 }
 
+/**
+ *
+ * @param {string} key
+ * @return {Iterable<string[] & {alpha: string | undefined}>}
+ */
+function* toPaths(key) {
+  let path = toPath(key)
+
+  if (path.length === 0) {
+    return
+  }
+
+  yield path
+
+  if (Array.isArray(key)) {
+    return
+  }
+
+  let pattern = /^(.*?)\s*\/\s*([^/]+)$/
+  let matches = key.match(pattern)
+
+  if (matches !== null) {
+    let [, prefix, alpha] = matches
+
+    let newPath = toPath(prefix)
+    newPath.alpha = alpha
+
+    yield newPath
+  }
+}
+
 function resolveFunctionKeys(object) {
+  // theme('colors.red.500 / 0.5') -> ['colors', 'red', '500 / 0', '5]
+
   const resolvePath = (key, defaultValue) => {
-    const path = toPath(key)
+    for (const path of toPaths(key)) {
+      let index = 0
+      let val = object
 
-    let index = 0
-    let val = object
+      while (val !== undefined && val !== null && index < path.length) {
+        val = val[path[index++]]
 
-    while (val !== undefined && val !== null && index < path.length) {
-      val = val[path[index++]]
-      val = isFunction(val) ? val(resolvePath, configUtils) : val
+        let shouldResolveAsFn =
+          isFunction(val) && (path.alpha === undefined || index <= path.length - 1)
+
+        val = shouldResolveAsFn ? val(resolvePath, configUtils) : val
+      }
+
+      if (val !== undefined) {
+        if (path.alpha !== undefined) {
+          let normalized = parseColorFormat(val)
+
+          return withAlphaValue(normalized, path.alpha, toColorValue(normalized))
+        }
+
+        if (isPlainObject(val)) {
+          return cloneDeep(val)
+        }
+
+        return val
+      }
     }
 
-    return val === undefined ? defaultValue : val
+    return defaultValue
   }
 
-  resolvePath.theme = resolvePath
-
-  for (let key in configUtils) {
-    resolvePath[key] = configUtils[key]
-  }
+  Object.assign(resolvePath, {
+    theme: resolvePath,
+    ...configUtils,
+  })
 
   return Object.keys(object).reduce((resolved, key) => {
-    return {
-      ...resolved,
-      [key]: isFunction(object[key]) ? object[key](resolvePath, configUtils) : object[key],
-    }
+    resolved[key] = isFunction(object[key]) ? object[key](resolvePath, configUtils) : object[key]
+
+    return resolved
   }, {})
 }
 
@@ -184,90 +231,6 @@ function extractPluginConfigs(configs) {
   })
 
   return allConfigs
-}
-
-function mergeVariants(variants) {
-  const mergedVariants = variants.reduce((resolved, variants) => {
-    Object.entries(variants || {}).forEach(([plugin, pluginVariants]) => {
-      if (isFunction(pluginVariants)) {
-        resolved[plugin] = pluginVariants({
-          variants(path) {
-            return dlv(resolved, path, [])
-          },
-          before(toInsert, variant, existingPluginVariants = resolved?.[plugin] ?? []) {
-            if (variant === undefined) {
-              return [...toInsert, ...existingPluginVariants]
-            }
-
-            const index = existingPluginVariants.indexOf(variant)
-
-            if (index === -1) {
-              return [...existingPluginVariants, ...toInsert]
-            }
-
-            return [
-              ...existingPluginVariants.slice(0, index),
-              ...toInsert,
-              ...existingPluginVariants.slice(index),
-            ]
-          },
-          after(toInsert, variant, existingPluginVariants = resolved?.[plugin] ?? []) {
-            if (variant === undefined) {
-              return [...existingPluginVariants, ...toInsert]
-            }
-
-            const index = existingPluginVariants.indexOf(variant)
-
-            if (index === -1) {
-              return [...toInsert, ...existingPluginVariants]
-            }
-
-            return [
-              ...existingPluginVariants.slice(0, index + 1),
-              ...toInsert,
-              ...existingPluginVariants.slice(index + 1),
-            ]
-          },
-          without(toRemove, existingPluginVariants = resolved?.[plugin] ?? []) {
-            return existingPluginVariants.filter((v) => !toRemove.includes(v))
-          },
-        })
-      } else {
-        resolved[plugin] = pluginVariants
-      }
-    })
-
-    return resolved
-  }, {})
-
-  return {
-    ...mergedVariants,
-    extend: collectExtends(variants),
-  }
-}
-
-function mergeVariantExtensions({ extend, ...variants }, variantOrder) {
-  return mergeWith(variants, extend, (variantsValue, extensions) => {
-    const merged = uniq([...(variantsValue || []), ...extensions].flat())
-
-    if (extensions.flat().length === 0) {
-      return merged
-    }
-
-    return merged.sort((a, z) => variantOrder.indexOf(a) - variantOrder.indexOf(z))
-  })
-}
-
-function resolveVariants([firstConfig, ...variantConfigs], variantOrder) {
-  // Global variants configuration like `variants: ['hover', 'focus']`
-  if (Array.isArray(firstConfig)) {
-    return firstConfig
-  }
-
-  return mergeVariantExtensions(
-    mergeVariants([firstConfig, ...variantConfigs].reverse()),
-    variantOrder
-  )
 }
 
 function resolveCorePlugins(corePluginConfigs) {
@@ -296,10 +259,8 @@ export default function resolveConfig(configs) {
       prefix: '',
       important: false,
       separator: ':',
-      variantOrder: defaultConfig.variantOrder,
     },
   ]
-  let { variantOrder } = allConfigs.find((c) => c.variantOrder)
 
   return normalizeConfig(
     defaults(
@@ -307,70 +268,10 @@ export default function resolveConfig(configs) {
         theme: resolveFunctionKeys(
           mergeExtensions(mergeThemes(allConfigs.map((t) => t?.theme ?? {})))
         ),
-        variants: resolveVariants(
-          allConfigs.map((c) => c?.variants ?? {}),
-          variantOrder
-        ),
         corePlugins: resolveCorePlugins(allConfigs.map((c) => c.corePlugins)),
         plugins: resolvePluginLists(configs.map((c) => c?.plugins ?? [])),
       },
       ...allConfigs
     )
   )
-}
-
-let warnedAbout = new Set()
-function normalizeConfig(config) {
-  if (!warnedAbout.has('purge-deprecation') && config.hasOwnProperty('purge')) {
-    log.warn([
-      'The `purge` option in your tailwind.config.js file has been deprecated.',
-      'Please rename this to `content` instead.',
-    ])
-    warnedAbout.add('purge-deprecation')
-  }
-
-  config.content = {
-    content: (() => {
-      let { content, purge } = config
-
-      if (Array.isArray(purge)) return purge
-      if (Array.isArray(purge?.content)) return purge.content
-      if (Array.isArray(content)) return content
-      if (Array.isArray(content?.content)) return content.content
-
-      return []
-    })(),
-    safelist: (() => {
-      let { content, purge } = config
-
-      let [safelistKey, safelistPaths] = (() => {
-        if (Array.isArray(content?.safelist)) return ['content.safelist', content.safelist]
-        if (Array.isArray(purge?.safelist)) return ['purge.safelist', purge.safelist]
-        if (Array.isArray(purge?.options?.safelist))
-          return ['purge.options.safelist', purge.options.safelist]
-        return [null, []]
-      })()
-
-      return safelistPaths.map((content) => {
-        if (typeof content === 'string') {
-          return { raw: content, extension: 'html' }
-        }
-
-        if (content instanceof RegExp) {
-          throw new Error(
-            `Values inside '${safelistKey}' can only be of type 'string', found 'regex'.`
-          )
-        }
-
-        throw new Error(
-          `Values inside '${safelistKey}' can only be of type 'string', found '${typeof content}'.`
-        )
-      })
-    })(),
-    extract: config.content?.extract || config.purge?.extract || {},
-    options: config.content?.options || config.purge?.options || {},
-    transform: config.content?.transform || config.purge?.transform || {},
-  }
-
-  return config
 }

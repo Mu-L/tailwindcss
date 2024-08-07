@@ -1,14 +1,24 @@
-export default function (value) {
+export default function negateValue(value) {
   value = `${value}`
+
+  if (value === '0') {
+    return '0'
+  }
 
   // Flip sign of numbers
   if (/^[+-]?(\d+|\d*\.\d+)(e[+-]?\d+)?(%|\w+)?$/.test(value)) {
     return value.replace(/^[+-]?/, (sign) => (sign === '-' ? '' : '-'))
   }
 
-  if (value.includes('var(') || value.includes('calc(')) {
-    return `calc(${value} * -1)`
-  }
+  // What functions we support negating numeric values for
+  // var() isn't inherently a numeric function but we support it anyway
+  // The trigonometric functions are omitted because you'll need to use calc(…) with them _anyway_
+  // to produce generally useful results and that will be covered already
+  let numericFunctions = ['var', 'calc', 'min', 'max', 'clamp']
 
-  return value
+  for (const fn of numericFunctions) {
+    if (value.includes(`${fn}(`)) {
+      return `calc(${value} * -1)`
+    }
+  }
 }

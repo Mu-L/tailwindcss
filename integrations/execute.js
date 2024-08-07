@@ -1,20 +1,53 @@
+let fs = require('fs')
 let path = require('path')
 let { spawn } = require('child_process')
 let resolveToolRoot = require('./resolve-tool-root')
 
-let runningProcessess = []
+let SHOW_OUTPUT = false
+
+let runningProcesses = []
 
 afterEach(() => {
-  runningProcessess.splice(0).forEach((runningProcess) => runningProcess.stop())
+  runningProcesses.splice(0).forEach((runningProcess) => runningProcess.stop())
 })
+
+function debounce(fn, ms) {
+  let state = { timer: undefined }
+
+  return (...args) => {
+    if (state.timer) clearTimeout(state.timer)
+    state.timer = setTimeout(() => fn(...args), ms)
+  }
+}
 
 module.exports = function $(command, options = {}) {
   let abortController = new AbortController()
-  let cwd = resolveToolRoot()
+  let root = resolveToolRoot()
+  let cwd = options.cwd ?? root
 
-  let args = command.split(' ')
-  command = args.shift()
-  command = command === 'node' ? command : path.resolve(cwd, 'node_modules', '.bin', command)
+  let args = options.shell
+    ? [command]
+    : (() => {
+        let args = command.trim().split(/\s+/)
+        command = args.shift()
+        command =
+          command === 'node'
+            ? command
+            : (function () {
+                let local = path.resolve(root, 'node_modules', '.bin', command)
+                if (fs.existsSync(local)) {
+                  return local
+                }
+
+                let hoisted = path.resolve(root, '..', '..', 'node_modules', '.bin', command)
+                if (fs.existsSync(hoisted)) {
+                  return hoisted
+                }
+
+                return `npx ${command}`
+              })()
+        return [command, args]
+      })()
 
   let stdoutMessages = []
   let stderrMessages = []
@@ -37,16 +70,16 @@ module.exports = function $(command, options = {}) {
     }
   }
 
-  function notifyNextStdoutActor() {
+  let notifyNextStdoutActor = debounce(() => {
     return notifyNext(stdoutActors, stdoutMessages)
-  }
+  }, 200)
 
-  function notifyNextStderrActor() {
+  let notifyNextStderrActor = debounce(() => {
     return notifyNext(stderrActors, stderrMessages)
-  }
+  }, 200)
 
   let runningProcess = new Promise((resolve, reject) => {
-    let child = spawn(command, args, {
+    let child = spawn(...args, {
       ...options,
       env: {
         ...process.env,
@@ -61,6 +94,9 @@ module.exports = function $(command, options = {}) {
     let combined = ''
 
     child.stdout.on('data', (data) => {
+      if (SHOW_OUTPUT) {
+        console.log(data.toString())
+      }
       stdoutMessages.push(data.toString())
       notifyNextStdoutActor()
       stdout += data
@@ -68,10 +104,19 @@ module.exports = function $(command, options = {}) {
     })
 
     child.stderr.on('data', (data) => {
+      if (SHOW_OUTPUT) {
+        console.error(data.toString())
+      }
       stderrMessages.push(data.toString())
       notifyNextStderrActor()
       stderr += data
       combined += data
+    })
+
+    child.on('error', (err) => {
+      if (err.name !== 'AbortError') {
+        throw err
+      }
     })
 
     child.on('close', (code, signal) => {
@@ -84,7 +129,7 @@ module.exports = function $(command, options = {}) {
     })
   })
 
-  runningProcessess.push(runningProcess)
+  runningProcesses.push(runningProcess)
 
   return Object.assign(runningProcess, {
     stop() {

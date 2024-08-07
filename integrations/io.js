@@ -6,6 +6,17 @@ let chokidar = require('chokidar')
 
 let resolveToolRoot = require('./resolve-tool-root')
 
+function getWatcherOptions() {
+  return {
+    usePolling: true,
+    interval: 200,
+    awaitWriteFinish: {
+      stabilityThreshold: 1500,
+      pollInterval: 50,
+    },
+  }
+}
+
 module.exports = function ({
   /** Output directory, relative to the tool. */
   output = 'dist',
@@ -86,14 +97,20 @@ module.exports = function ({
     },
     async removeFile(file) {
       let filePath = path.resolve(toolRoot, file)
+
       if (!fileCache[filePath]) {
-        fileCache[filePath] = await fs.readFile(filePath, 'utf8')
+        fileCache[filePath] = await fs.readFile(filePath, 'utf8').catch(() => null)
       }
-      await fs.unlink(filePath)
+
+      await fs.unlink(filePath).catch(() => null)
     },
     async readOutputFile(file) {
       file = await resolveFile(file, absoluteOutputFolder)
       return fs.readFile(path.resolve(absoluteOutputFolder, file), 'utf8')
+    },
+    async readInputFile(file) {
+      file = await resolveFile(file, absoluteInputFolder)
+      return fs.readFile(path.resolve(absoluteInputFolder, file), 'utf8')
     },
     async appendToInputFile(file, contents) {
       let filePath = path.resolve(absoluteInputFolder, file)
@@ -117,53 +134,47 @@ module.exports = function ({
         }
       }
 
-      return fs.writeFile(path.resolve(absoluteInputFolder, file), contents, 'utf8')
+      await fs.mkdir(path.dirname(filePath), { recursive: true })
+      return fs.writeFile(filePath, contents, 'utf8')
     },
     async waitForOutputFileCreation(file) {
       if (file instanceof RegExp) {
         let r = file
-        let watcher = chokidar.watch(absoluteOutputFolder)
+        let watcher = chokidar.watch(absoluteOutputFolder, getWatcherOptions())
 
         return new Promise((resolve) => {
           watcher.on('add', (file) => {
             if (r.test(file)) {
-              watcher.close()
-              resolve()
+              watcher.close().then(() => resolve())
             }
           })
         })
       } else {
         let filePath = path.resolve(absoluteOutputFolder, file)
-        let watcher = chokidar.watch(filePath)
 
-        let watcherPromise = new Promise((resolve) => {
-          watcher.once('add', () => {
-            watcher.close()
-            resolve()
+        return new Promise((resolve) => {
+          let watcher = chokidar.watch(absoluteOutputFolder, getWatcherOptions())
+
+          watcher.on('add', (addedFile) => {
+            if (addedFile !== filePath) return
+            return watcher.close().finally(resolve)
           })
         })
-
-        if (existsSync(filePath)) {
-          watcher.close()
-          return Promise.resolve()
-        }
-
-        return watcherPromise
       }
     },
     async waitForOutputFileChange(file, cb = () => {}) {
       file = await resolveFile(file, absoluteOutputFolder)
-
       let filePath = path.resolve(absoluteOutputFolder, file)
-      let watcher = chokidar.watch(filePath)
 
       return new Promise((resolve) => {
-        let chain = Promise.resolve()
-        watcher.once('change', () => {
-          watcher.close()
-          chain.then(() => resolve())
-        })
-        chain.then(() => cb())
+        let watcher = chokidar.watch(absoluteOutputFolder, getWatcherOptions())
+
+        watcher
+          .on('change', (changedFile) => {
+            if (changedFile !== filePath) return
+            return watcher.close().finally(resolve)
+          })
+          .on('ready', cb)
       })
     },
   }

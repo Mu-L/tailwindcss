@@ -1,16 +1,20 @@
 # Contributing
 
-Thanks for your interest in contributing to Tailwind CSS! Please take a moment to review this document **before submitting a pull request**.
+## Bug fixes
 
-## Pull requests
+If you've found a bug in Tailwind that you'd like to fix, [submit a pull request](https://github.com/tailwindlabs/tailwindcss/pulls) with your changes. Include a helpful description of the problem and how your changes address it, and provide tests so we can verify the fix works as expected.
 
-**Please ask first before starting work on any significant new features.**
+## New features
 
-It's never a fun experience to have your pull request declined after investing a lot of time and effort into a new feature. To avoid this from happening, we request that contributors create [an issue](https://github.com/tailwindcss/tailwindcss/issues) to first discuss any significant new features. This includes things like adding new utilities, creating new at-rules, etc.
+If there's a new feature you'd like to see added to Tailwind, [share your idea with us](https://github.com/tailwindlabs/tailwindcss/discussions/new?category=ideas) in our discussion forum to get it on our radar as something to consider for a future release.
+
+**Please note that we don't often accept pull requests for new features.** Adding a new feature to Tailwind requires us to think through the entire problem ourselves to make sure we agree with the proposed API, which means the feature needs to be high on our own priority list for us to be able to give it the attention it needs.
+
+If you open a pull request for a new feature, we're likely to close it not because it's a bad idea, but because we aren't ready to prioritize the feature and don't want the PR to sit open for months or even years.
 
 ## Coding standards
 
-Our code formatting rules are defined in [.eslintrc](https://github.com/tailwindcss/tailwindcss/blob/master/.eslintrc.json). You can check your code against these standards by running:
+Our code formatting rules are defined in [.eslintrc](https://github.com/tailwindcss/tailwindcss/blob/main/.eslintrc.json). You can check your code against these standards by running:
 
 ```sh
 npm run style
@@ -27,38 +31,7 @@ npm run style -- --fix
 You can run the test suite using the following commands:
 
 ```sh
-npm test
+npm run build && npm test
 ```
 
 Please ensure that the tests are passing when submitting a pull request. If you're adding new features to Tailwind, please include tests.
-
-## Building the CSS and trying your changes manually
-
-In addition to the automated tests, if you'd like to test the generated CSS manually with your own test HTML file, you can generate the default build by running:
-
-```sh
-npm run prepublishOnly
-```
-
-This will create new CSS files in the `/dist` folder which you can reference in your own test HTML file. We often test our own changes by creating an `index.html` file in the root of the Tailwind project itself that pulls in the `/dist/tailwind.css` stylesheet:
-
-```html
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
-    <link rel="stylesheet" href="/dist/tailwind.css" />
-    <title>Hello, world!</title>
-  </head>
-  <body>
-    <h1 class="text-2xl font-bold text-center">Hello world!</h1>
-  </body>
-</html>
-```
-
-You can then use a tool like [live-server](https://www.npmjs.com/package/live-server) to preview it in the browser:
-
-```sh
-live-server .
-```

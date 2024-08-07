@@ -13,7 +13,7 @@ const TIMINGS = new Set([
 ])
 const TIMING_FNS = ['cubic-bezier', 'steps']
 
-const COMMA = /\,(?![^(]*\))/g // Comma separator that is not located between brackets. E.g.: `cubiz-bezier(a, b, c)` these don't count.
+const COMMA = /\,(?![^(]*\))/g // Comma separator that is not located between brackets. E.g.: `cubic-bezier(a, b, c)` these don't count.
 const SPACE = /\ +(?![^(]*\))/g // Similar to the one above, but with spaces instead.
 const TIME = /^(-?[\d.]+m?s)$/
 const DIGIT = /^(\d+)$/
@@ -54,7 +54,13 @@ export default function parseAnimationValue(input) {
       } else if (!seen.has('DELAY') && TIME.test(part)) {
         result.delay = part
         seen.add('DELAY')
-      } else result.name = part
+      } else if (!seen.has('NAME')) {
+        result.name = part
+        seen.add('NAME')
+      } else {
+        if (!result.unknown) result.unknown = []
+        result.unknown.push(part)
+      }
     }
 
     return result

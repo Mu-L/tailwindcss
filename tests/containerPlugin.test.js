@@ -142,8 +142,8 @@ test('the container can be centered by default', () => {
     expect(result.css).toMatchFormattedCss(css`
       .container {
         width: 100%;
-        margin-right: auto;
         margin-left: auto;
+        margin-right: auto;
       }
       @media (min-width: 640px) {
         .container {
@@ -188,8 +188,8 @@ test('horizontal padding can be included by default', () => {
     expect(result.css).toMatchFormattedCss(css`
       .container {
         width: 100%;
-        padding-right: 2rem;
         padding-left: 2rem;
+        padding-right: 2rem;
       }
       @media (min-width: 640px) {
         .container {
@@ -245,14 +245,14 @@ test('responsive horizontal padding can be included by default', () => {
     expect(result.css).toMatchFormattedCss(css`
       .container {
         width: 100%;
-        padding-right: 1rem;
         padding-left: 1rem;
+        padding-right: 1rem;
       }
       @media (min-width: 576px) {
         .container {
           max-width: 576px;
-          padding-right: 2rem;
           padding-left: 2rem;
+          padding-right: 2rem;
         }
       }
       @media (min-width: 768px) {
@@ -263,15 +263,15 @@ test('responsive horizontal padding can be included by default', () => {
       @media (min-width: 992px) {
         .container {
           max-width: 992px;
-          padding-right: 4rem;
           padding-left: 4rem;
+          padding-right: 4rem;
         }
       }
       @media (min-width: 1200px) {
         .container {
           max-width: 1200px;
-          padding-right: 5rem;
           padding-left: 5rem;
+          padding-right: 5rem;
         }
       }
     `)
@@ -294,10 +294,10 @@ test('setting all options at once', () => {
     expect(result.css).toMatchFormattedCss(css`
       .container {
         width: 100%;
-        margin-right: auto;
         margin-left: auto;
-        padding-right: 2rem;
+        margin-right: auto;
         padding-left: 2rem;
+        padding-right: 2rem;
       }
       @media (min-width: 400px) {
         .container {
@@ -326,16 +326,16 @@ test('container can use variants', () => {
   return run('@tailwind components', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       @media (min-width: 1024px) {
-        .lg\\:hover\\:container:hover {
+        .lg\:hover\:container:hover {
           width: 100%;
         }
         @media (min-width: 400px) {
-          .lg\\:hover\\:container:hover {
+          .lg\:hover\:container:hover {
             max-width: 400px;
           }
         }
         @media (min-width: 500px) {
-          .lg\\:hover\\:container:hover {
+          .lg\:hover\:container:hover {
             max-width: 500px;
           }
         }

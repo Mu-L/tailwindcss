@@ -1,13 +1,26 @@
 import postcss from 'postcss'
+import isPlainObject from './isPlainObject'
 
 export default function transformThemeValue(themeSection) {
   if (['fontSize', 'outline'].includes(themeSection)) {
-    return (value) => (Array.isArray(value) ? value[0] : value)
+    return (value) => {
+      if (typeof value === 'function') value = value({})
+      if (Array.isArray(value)) value = value[0]
+
+      return value
+    }
+  }
+
+  if (themeSection === 'fontFamily') {
+    return (value) => {
+      if (typeof value === 'function') value = value({})
+      let families = Array.isArray(value) && isPlainObject(value[1]) ? value[0] : value
+      return Array.isArray(families) ? families.join(', ') : families
+    }
   }
 
   if (
     [
-      'fontFamily',
       'boxShadow',
       'transitionProperty',
       'transitionDuration',
@@ -20,18 +33,30 @@ export default function transformThemeValue(themeSection) {
       'animation',
     ].includes(themeSection)
   ) {
-    return (value) => (Array.isArray(value) ? value.join(', ') : value)
+    return (value) => {
+      if (typeof value === 'function') value = value({})
+      if (Array.isArray(value)) value = value.join(', ')
+
+      return value
+    }
   }
 
   // For backwards compatibility reasons, before we switched to underscores
   // instead of commas for arbitrary values.
   if (['gridTemplateColumns', 'gridTemplateRows', 'objectPosition'].includes(themeSection)) {
-    return (value) => (typeof value === 'string' ? postcss.list.comma(value).join(' ') : value)
+    return (value) => {
+      if (typeof value === 'function') value = value({})
+      if (typeof value === 'string') value = postcss.list.comma(value).join(' ')
+
+      return value
+    }
   }
 
-  if (themeSection === 'colors') {
-    return (value) => (typeof value === 'function' ? value({}) : value)
-  }
+  return (value, opts = {}) => {
+    if (typeof value === 'function') {
+      value = value(opts)
+    }
 
-  return (value) => value
+    return value
+  }
 }

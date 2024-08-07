@@ -15,19 +15,17 @@ test('class variants are inserted at `@tailwind variants`', async () => {
 
   return run(input, config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
-      .font-bold {
-        font-weight: 700;
-      }
-      .hover\\:font-bold:hover {
+      .font-bold,
+      .hover\:font-bold:hover {
         font-weight: 700;
       }
       @media (min-width: 768px) {
-        .md\\:font-bold {
+        .md\:font-bold {
           font-weight: 700;
         }
       }
       .foo {
-        color: black;
+        color: #000;
       }
     `)
   })
@@ -48,19 +46,17 @@ test('`@tailwind screens` works as an alias for `@tailwind variants`', async () 
 
   return run(input, config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
-      .font-bold {
-        font-weight: 700;
-      }
-      .hover\\:font-bold:hover {
+      .font-bold,
+      .hover\:font-bold:hover {
         font-weight: 700;
       }
       @media (min-width: 768px) {
-        .md\\:font-bold {
+        .md\:font-bold {
           font-weight: 700;
         }
       }
       .foo {
-        color: black;
+        color: #000;
       }
     `)
   })

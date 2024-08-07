@@ -1,27 +1,15 @@
+import fs from 'fs'
+import LRU from '@alloc/quick-lru'
 import * as sharedState from './sharedState'
 import { generateRules } from './generateRules'
-import bigSign from '../util/bigSign'
+import log from '../util/log'
 import cloneNodes from '../util/cloneNodes'
+import { defaultExtractor } from './defaultExtractor'
 
 let env = sharedState.env
-let contentMatchCache = sharedState.contentMatchCache
-
-const PATTERNS = [
-  "([^<>\"'`\\s]*\\['[^<>\"'`\\s]*'\\])", // `content-['hello']` but not `content-['hello']']`
-  '([^<>"\'`\\s]*\\["[^<>"\'`\\s]*"\\])', // `content-["hello"]` but not `content-["hello"]"]`
-  '([^<>"\'`\\s]*\\[[^<>"\'`\\s]+\\])', // `fill-[#bada55]`
-  '([^<>"\'`\\s]*[^<>"\'`\\s:])', // `px-1.5`, `uppercase` but not `uppercase:`
-].join('|')
-const BROAD_MATCH_GLOBAL_REGEXP = new RegExp(PATTERNS, 'g')
-const INNER_MATCH_GLOBAL_REGEXP = /[^<>"'`\s.(){}[\]#=%]*[^<>"'`\s.(){}[\]#=%:]/g
 
 const builtInExtractors = {
-  DEFAULT: (content) => {
-    let broadMatches = content.match(BROAD_MATCH_GLOBAL_REGEXP) || []
-    let innerMatches = content.match(INNER_MATCH_GLOBAL_REGEXP) || []
-
-    return [...broadMatches, ...innerMatches]
-  },
+  DEFAULT: defaultExtractor,
 }
 
 const builtInTransformers = {
@@ -29,40 +17,19 @@ const builtInTransformers = {
   svelte: (content) => content.replace(/(?:^|\s)class:/g, ' '),
 }
 
-function getExtractor(tailwindConfig, fileExtension) {
-  let extractors = tailwindConfig.content.extract
-  let contentOptions = tailwindConfig.content.options
-
-  if (typeof extractors === 'function') {
-    extractors = {
-      DEFAULT: extractors,
-    }
-  }
-  if (contentOptions.defaultExtractor) {
-    extractors.DEFAULT = contentOptions.defaultExtractor
-  }
-  for (let { extensions, extractor } of contentOptions.extractors || []) {
-    for (let extension of extensions) {
-      extractors[extension] = extractor
-    }
-  }
+function getExtractor(context, fileExtension) {
+  let extractors = context.tailwindConfig.content.extract
 
   return (
     extractors[fileExtension] ||
     extractors.DEFAULT ||
     builtInExtractors[fileExtension] ||
-    builtInExtractors.DEFAULT
+    builtInExtractors.DEFAULT(context)
   )
 }
 
 function getTransformer(tailwindConfig, fileExtension) {
   let transformers = tailwindConfig.content.transform
-
-  if (typeof transformers === 'function') {
-    transformers = {
-      DEFAULT: transformers,
-    }
-  }
 
   return (
     transformers[fileExtension] ||
@@ -72,10 +39,16 @@ function getTransformer(tailwindConfig, fileExtension) {
   )
 }
 
+let extractorCache = new WeakMap()
+
 // Scans template contents for possible classes. This is a hot path on initial build but
 // not too important for subsequent builds. The faster the better though — if we can speed
 // up these regexes by 50% that could cut initial build time by like 20%.
-function getClassCandidates(content, extractor, contentMatchCache, candidates, seen) {
+function getClassCandidates(content, extractor, candidates, seen) {
+  if (!extractorCache.has(extractor)) {
+    extractorCache.set(extractor, new LRU({ maxSize: 25000 }))
+  }
+
   for (let line of content.split('\n')) {
     line = line.trim()
 
@@ -84,8 +57,8 @@ function getClassCandidates(content, extractor, contentMatchCache, candidates, s
     }
     seen.add(line)
 
-    if (contentMatchCache.has(line)) {
-      for (let match of contentMatchCache.get(line)) {
+    if (extractorCache.get(extractor).has(line)) {
+      for (let match of extractorCache.get(extractor).get(line)) {
         candidates.add(match)
       }
     } else {
@@ -96,63 +69,36 @@ function getClassCandidates(content, extractor, contentMatchCache, candidates, s
         candidates.add(match)
       }
 
-      contentMatchCache.set(line, lineMatchesSet)
+      extractorCache.get(extractor).set(line, lineMatchesSet)
     }
   }
 }
 
+/**
+ *
+ * @param {[import('./offsets.js').RuleOffset, import('postcss').Node][]} rules
+ * @param {*} context
+ */
 function buildStylesheet(rules, context) {
-  let sortedRules = rules.sort(([a], [z]) => bigSign(a - z))
+  let sortedRules = context.offsets.sort(rules)
 
   let returnValue = {
     base: new Set(),
+    defaults: new Set(),
     components: new Set(),
     utilities: new Set(),
     variants: new Set(),
-
-    // All the CSS that is not Tailwind related can be put in this bucket. This
-    // will make it easier to later use this information when we want to
-    // `@apply` for example. The main reason we do this here is because we
-    // still need to make sure the order is correct. Last but not least, we
-    // will make sure to always re-inject this section into the css, even if
-    // certain rules were not used. This means that it will look like a no-op
-    // from the user's perspective, but we gathered all the useful information
-    // we need.
-    user: new Set(),
   }
 
   for (let [sort, rule] of sortedRules) {
-    if (sort >= context.minimumScreen) {
-      returnValue.variants.add(rule)
-      continue
-    }
-
-    if (sort & context.layerOrder.base) {
-      returnValue.base.add(rule)
-      continue
-    }
-
-    if (sort & context.layerOrder.components) {
-      returnValue.components.add(rule)
-      continue
-    }
-
-    if (sort & context.layerOrder.utilities) {
-      returnValue.utilities.add(rule)
-      continue
-    }
-
-    if (sort & context.layerOrder.user) {
-      returnValue.user.add(rule)
-      continue
-    }
+    returnValue[sort.layer].add(rule)
   }
 
   return returnValue
 }
 
 export default function expandTailwindAtRules(context) {
-  return (root) => {
+  return async (root) => {
     let layerNodes = {
       base: null,
       components: null,
@@ -160,13 +106,15 @@ export default function expandTailwindAtRules(context) {
       variants: null,
     }
 
-    // Make sure this file contains Tailwind directives. If not, we can save
-    // a lot of work and bail early. Also we don't have to register our touch
-    // file as a dependency since the output of this CSS does not depend on
-    // the source of any templates. Think Vue <style> blocks for example.
-    root.walkAtRules('tailwind', (rule) => {
-      if (Object.keys(layerNodes).includes(rule.params)) {
-        layerNodes[rule.params] = rule
+    root.walkAtRules((rule) => {
+      // Make sure this file contains Tailwind directives. If not, we can save
+      // a lot of work and bail early. Also we don't have to register our touch
+      // file as a dependency since the output of this CSS does not depend on
+      // the source of any templates. Think Vue <style> blocks for example.
+      if (rule.name === 'tailwind') {
+        if (Object.keys(layerNodes).includes(rule.params)) {
+          layerNodes[rule.params] = rule
+        }
       }
     })
 
@@ -177,16 +125,33 @@ export default function expandTailwindAtRules(context) {
     // ---
 
     // Find potential rules in changed files
-    let candidates = new Set(['*'])
+    let candidates = new Set([...(context.candidates ?? []), sharedState.NOT_ON_DEMAND])
     let seen = new Set()
 
     env.DEBUG && console.time('Reading changed files')
 
-    for (let { content, extension } of context.changedContent) {
-      let transformer = getTransformer(context.tailwindConfig, extension)
-      let extractor = getExtractor(context.tailwindConfig, extension)
-      getClassCandidates(transformer(content), extractor, contentMatchCache, candidates, seen)
+    /** @type {[item: {file?: string, content?: string}, meta: {transformer: any, extractor: any}][]} */
+    let regexParserContent = []
+
+    for (let item of context.changedContent) {
+      let transformer = getTransformer(context.tailwindConfig, item.extension)
+      let extractor = getExtractor(context, item.extension)
+      regexParserContent.push([item, { transformer, extractor }])
     }
+
+    const BATCH_SIZE = 500
+
+    for (let i = 0; i < regexParserContent.length; i += BATCH_SIZE) {
+      let batch = regexParserContent.slice(i, i + BATCH_SIZE)
+      await Promise.all(
+        batch.map(async ([{ file, content }, { transformer, extractor }]) => {
+          content = file ? await fs.promises.readFile(file, 'utf8') : content
+          getClassCandidates(transformer(content), extractor, candidates, seen)
+        })
+      )
+    }
+
+    env.DEBUG && console.timeEnd('Reading changed files')
 
     // ---
 
@@ -194,21 +159,27 @@ export default function expandTailwindAtRules(context) {
     let classCacheCount = context.classCache.size
 
     env.DEBUG && console.time('Generate rules')
-    let rules = generateRules(candidates, context)
+    env.DEBUG && console.time('Sorting candidates')
+    let sortedCandidates = new Set(
+      [...candidates].sort((a, z) => {
+        if (a === z) return 0
+        if (a < z) return -1
+        return 1
+      })
+    )
+    env.DEBUG && console.timeEnd('Sorting candidates')
+    generateRules(sortedCandidates, context)
     env.DEBUG && console.timeEnd('Generate rules')
 
     // We only ever add to the classCache, so if it didn't grow, there is nothing new.
     env.DEBUG && console.time('Build stylesheet')
     if (context.stylesheetCache === null || context.classCache.size !== classCacheCount) {
-      for (let rule of rules) {
-        context.ruleCache.add(rule)
-      }
-
       context.stylesheetCache = buildStylesheet([...context.ruleCache], context)
     }
     env.DEBUG && console.timeEnd('Build stylesheet')
 
     let {
+      defaults: defaultNodes,
       base: baseNodes,
       components: componentNodes,
       utilities: utilityNodes,
@@ -220,25 +191,75 @@ export default function expandTailwindAtRules(context) {
     // Replace any Tailwind directives with generated CSS
 
     if (layerNodes.base) {
-      layerNodes.base.before(cloneNodes([...baseNodes], layerNodes.base.source))
+      layerNodes.base.before(
+        cloneNodes([...baseNodes, ...defaultNodes], layerNodes.base.source, {
+          layer: 'base',
+        })
+      )
       layerNodes.base.remove()
     }
 
     if (layerNodes.components) {
-      layerNodes.components.before(cloneNodes([...componentNodes], layerNodes.components.source))
+      layerNodes.components.before(
+        cloneNodes([...componentNodes], layerNodes.components.source, {
+          layer: 'components',
+        })
+      )
       layerNodes.components.remove()
     }
 
     if (layerNodes.utilities) {
-      layerNodes.utilities.before(cloneNodes([...utilityNodes], layerNodes.utilities.source))
+      layerNodes.utilities.before(
+        cloneNodes([...utilityNodes], layerNodes.utilities.source, {
+          layer: 'utilities',
+        })
+      )
       layerNodes.utilities.remove()
     }
 
+    // We do post-filtering to not alter the emitted order of the variants
+    const variantNodes = Array.from(screenNodes).filter((node) => {
+      const parentLayer = node.raws.tailwind?.parentLayer
+
+      if (parentLayer === 'components') {
+        return layerNodes.components !== null
+      }
+
+      if (parentLayer === 'utilities') {
+        return layerNodes.utilities !== null
+      }
+
+      return true
+    })
+
     if (layerNodes.variants) {
-      layerNodes.variants.before(cloneNodes([...screenNodes], layerNodes.variants.source))
+      layerNodes.variants.before(
+        cloneNodes(variantNodes, layerNodes.variants.source, {
+          layer: 'variants',
+        })
+      )
       layerNodes.variants.remove()
-    } else {
-      root.append(cloneNodes([...screenNodes], root.source))
+    } else if (variantNodes.length > 0) {
+      root.append(
+        cloneNodes(variantNodes, root.source, {
+          layer: 'variants',
+        })
+      )
+    }
+
+    // TODO: Why is the root node having no source location for `end` possible?
+    root.source.end = root.source.end ?? root.source.start
+
+    // If we've got a utility layer and no utilities are generated there's likely something wrong
+    const hasUtilityVariants = variantNodes.some(
+      (node) => node.raws.tailwind?.parentLayer === 'utilities'
+    )
+
+    if (layerNodes.utilities && utilityNodes.size === 0 && !hasUtilityVariants) {
+      log.warn('content-problems', [
+        'No utility classes were detected in your source files. If this is unexpected, double-check the `content` option in your Tailwind CSS configuration.',
+        'https://tailwindcss.com/docs/content-configuration',
+      ])
     }
 
     // ---
@@ -246,7 +267,6 @@ export default function expandTailwindAtRules(context) {
     if (env.DEBUG) {
       console.log('Potential classes: ', candidates.size)
       console.log('Active contexts: ', sharedState.contextSourcesMap.size)
-      console.log('Content match entries', contentMatchCache.size)
     }
 
     // Clear the cache for the changed files

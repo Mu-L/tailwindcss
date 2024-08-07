@@ -1,5 +1,5 @@
-import theme from '../defaultTheme.js'
-import configStub from '../stubs/defaultConfig.stub.js'
+import theme from '../src/public/default-theme'
+import configStub from '../stubs/config.full.js'
 
 test('the default theme matches the stub', () => {
   expect(theme).toEqual(configStub.theme)

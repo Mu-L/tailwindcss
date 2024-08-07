@@ -1,9 +1,11 @@
 import fs from 'fs'
 import path from 'path'
-import { cjsConfigFile, defaultConfigFile } from '../src/constants'
 import inTempDirectory from '../jest/runInTempDirectory'
 
 import { run, html, css, javascript } from './util/run'
+
+const defaultConfigFile = 'tailwind.config.js'
+const cjsConfigFile = 'tailwind.config.cjs'
 
 test('it uses the values from the custom config file', () => {
   let config = require(path.resolve(`${__dirname}/fixtures/custom-config.js`))
@@ -11,7 +13,7 @@ test('it uses the values from the custom config file', () => {
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       @media (min-width: 400px) {
-        .mobile\\:font-bold {
+        .mobile\:font-bold {
           font-weight: 700;
         }
       }
@@ -32,7 +34,7 @@ test('custom config can be passed as an object', () => {
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       @media (min-width: 400px) {
-        .mobile\\:font-bold {
+        .mobile\:font-bold {
           font-weight: 700;
         }
       }
@@ -48,7 +50,7 @@ test('custom config path can be passed using `config` property in an object', ()
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       @media (min-width: 400px) {
-        .mobile\\:font-bold {
+        .mobile\:font-bold {
           font-weight: 700;
         }
       }
@@ -71,7 +73,7 @@ test('custom config can be passed under the `config` property', () => {
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       @media (min-width: 400px) {
-        .mobile\\:font-bold {
+        .mobile\:font-bold {
           font-weight: 700;
         }
       }
@@ -96,7 +98,7 @@ test('tailwind.config.cjs is picked up by default', () => {
     return run('@tailwind utilities').then((result) => {
       expect(result.css).toMatchFormattedCss(css`
         @media (min-width: 400px) {
-          .mobile\\:font-bold {
+          .mobile\:font-bold {
             font-weight: 700;
           }
         }
@@ -122,7 +124,7 @@ test('tailwind.config.js is picked up by default', () => {
     return run('@tailwind utilities').then((result) => {
       expect(result.css).toMatchFormattedCss(css`
         @media (min-width: 400px) {
-          .mobile\\:font-bold {
+          .mobile\:font-bold {
             font-weight: 700;
           }
         }
@@ -148,7 +150,7 @@ test('tailwind.config.cjs is picked up by default when passing an empty object',
     return run('@tailwind utilities', {}).then((result) => {
       expect(result.css).toMatchFormattedCss(css`
         @media (min-width: 400px) {
-          .mobile\\:font-bold {
+          .mobile\:font-bold {
             font-weight: 700;
           }
         }
@@ -174,7 +176,7 @@ test('tailwind.config.js is picked up by default when passing an empty object', 
     return run('@tailwind utilities', {}).then((result) => {
       expect(result.css).toMatchFormattedCss(css`
         @media (min-width: 400px) {
-          .mobile\\:font-bold {
+          .mobile\:font-bold {
             font-weight: 700;
           }
         }
@@ -185,7 +187,7 @@ test('tailwind.config.js is picked up by default when passing an empty object', 
 
 test('the default config can be overridden using the presets key', () => {
   let config = {
-    content: [{ raw: html`<div class="min-h-0 min-h-primary min-h-secondary"></div>` }],
+    content: [{ raw: html`<div class="min-h-primary min-h-secondary min-h-0"></div>` }],
     presets: [
       {
         theme: {
@@ -201,7 +203,7 @@ test('the default config can be overridden using the presets key', () => {
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .min-h-0 {
-        min-height: 0px;
+        min-height: 0;
       }
       .min-h-primary {
         min-height: 48px;
@@ -215,7 +217,7 @@ test('the default config can be overridden using the presets key', () => {
 
 test('presets can be functions', () => {
   let config = {
-    content: [{ raw: html`<div class="min-h-0 min-h-primary min-h-secondary"></div>` }],
+    content: [{ raw: html`<div class="min-h-primary min-h-secondary min-h-0"></div>` }],
     presets: [
       () => ({
         theme: {
@@ -231,7 +233,7 @@ test('presets can be functions', () => {
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
       .min-h-0 {
-        min-height: 0px;
+        min-height: 0;
       }
       .min-h-primary {
         min-height: 48px;
@@ -245,7 +247,7 @@ test('presets can be functions', () => {
 
 test('the default config can be removed by using an empty presets key in a preset', () => {
   let config = {
-    content: [{ raw: html`<div class="min-h-0 min-h-primary min-h-secondary"></div>` }],
+    content: [{ raw: html`<div class="min-h-primary min-h-secondary min-h-0"></div>` }],
     presets: [
       {
         presets: [],
@@ -273,7 +275,7 @@ test('the default config can be removed by using an empty presets key in a prese
 
 test('presets can have their own presets', () => {
   let config = {
-    content: [{ raw: html`<div class="bg-transparent bg-black bg-white bg-red"></div>` }],
+    content: [{ raw: html`<div class="bg-red bg-transparent bg-black bg-white"></div>` }],
     presets: [
       {
         presets: [],
@@ -312,17 +314,17 @@ test('presets can have their own presets', () => {
 
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
-      .bg-transparent {
-        background-color: transparent;
-      }
       .bg-black {
-        background-color: black;
-      }
-      .bg-white {
-        background-color: white;
+        background-color: #000;
       }
       .bg-red {
-        background-color: #ee0000;
+        background-color: #e00;
+      }
+      .bg-transparent {
+        background-color: #0000;
+      }
+      .bg-white {
+        background-color: #fff;
       }
     `)
   })
@@ -330,7 +332,7 @@ test('presets can have their own presets', () => {
 
 test('function presets can be mixed with object presets', () => {
   let config = {
-    content: [{ raw: html`<div class="bg-transparent bg-black bg-white bg-red"></div>` }],
+    content: [{ raw: html`<div class="bg-red bg-transparent bg-black bg-white"></div>` }],
     presets: [
       () => ({
         presets: [],
@@ -369,17 +371,17 @@ test('function presets can be mixed with object presets', () => {
 
   return run('@tailwind utilities', config).then((result) => {
     expect(result.css).toMatchFormattedCss(css`
-      .bg-transparent {
-        background-color: transparent;
-      }
       .bg-black {
-        background-color: black;
-      }
-      .bg-white {
-        background-color: white;
+        background-color: #000;
       }
       .bg-red {
-        background-color: #ee0000;
+        background-color: #e00;
+      }
+      .bg-transparent {
+        background-color: #0000;
+      }
+      .bg-white {
+        background-color: #fff;
       }
     `)
   })
